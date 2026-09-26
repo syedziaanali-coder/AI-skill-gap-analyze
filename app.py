@@ -18,18 +18,26 @@ if TESSERACT_CMD:
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
 
 # GEMINI CONFIG
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    raise RuntimeError("GEMINI_API_KEY environment variable is required.")
-client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL_NAME = "gemini-2.5-flash"
+# Keep the API key out of source control. Vercel supplies it through Environment Variables.
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+def get_gemini_client():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY environment variable is not configured.")
+    return genai.Client(api_key=api_key)
 
 
 # =========================
 # 🔹 DATABASE SETUP
 # =========================
+def get_database_path():
+    # Vercel's runtime filesystem is ephemeral. /tmp is the writable location.
+    # For local development, keep the existing health.db in the project directory.
+    return os.path.join("/tmp" if os.getenv("VERCEL") else ".", "health.db")
+
 def init_db():
-    conn = sqlite3.connect('health.db')
+    conn = sqlite3.connect(get_database_path())
     c = conn.cursor()
     # Main history table
     c.execute('''
@@ -116,7 +124,7 @@ init_db()
 
 
 def get_db_connection():
-    conn = sqlite3.connect('health.db')
+    conn = sqlite3.connect(get_database_path())
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -166,7 +174,7 @@ def chat():
     prompt = f"You are a helpful medical AI assistant. IMPORTANT: Keep your answers EXTREMELY short, brief, and concise (maximum 1-2 short sentences). Be direct and safe. User: {user_msg}"
 
     try:
-        response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
+        response = get_gemini_client().models.generate_content(model=MODEL_NAME, contents=prompt)
         ai_reply = response.text
 
         conn.execute('INSERT INTO chat_history (role, message) VALUES (?, ?)', ('ai', ai_reply))
@@ -275,6 +283,10 @@ def upload_report():
                 for page in pdf.pages:
                     extracted_text += page.extract_text() or ""
         elif filename.endswith((".png", ".jpg", ".jpeg")):
+            # Tesseract is normally not installed in Vercel's Python runtime.
+            # Allow local OCR when TESSERACT_CMD is configured, otherwise return a clear message.
+            if not os.getenv("TESSERACT_CMD"):
+                return jsonify({"error": "Image OCR requires Tesseract. Use PDF/TXT on Vercel or configure TESSERACT_CMD on a server that includes Tesseract."}), 503
             image = Image.open(BytesIO(file.read())).convert("L")
             extracted_text = pytesseract.image_to_string(image)
         elif filename.endswith(".txt"):
