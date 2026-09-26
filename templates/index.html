@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HealthAI - Intelligent Health & Clinical Analytics</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+</head>
+
+<body>
+<!-- AI CHATBOT FEATURE -->
+<div class="chat-bot-wrapper" id="chatBotWrapper">
+    <div class="chat-bot-window glass-panel" id="chatBotWindow" style="display:none;">
+        <div class="chat-header d-flex justify-between align-center">
+            <span><i class="ri-robot-2-line"></i> HealthAI Assistant</span>
+            <div>
+                <button class="icon-btn-small" onclick="clearChat()" title="Clear Chat"><i class="ri-delete-bin-line"></i></button>
+                <button class="icon-btn-small" onclick="toggleChat()" title="Close Chat"><i class="ri-close-line"></i></button>
+            </div>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-area d-flex">
+            <input type="text" id="chatInput" placeholder="Ask a health question..." class="glass-input" onkeypress="handleChatKey(event)">
+            <button class="analyze-btn" style="width:50px; padding: 10px; margin-left: 10px;" onclick="sendChatMessage()"><i class="ri-send-plane-fill"></i></button>
+        </div>
+    </div>
+    <button class="chat-bot-toggle analyze-btn ripple" onclick="toggleChat()" title="Open Health Assistant"><i class="ri-message-3-line"></i></button>
+</div>
+
+<!-- LOADING SCREEN -->
+<div id="globalLoader" class="loader-overlay">
+    <div class="medical-spinner"></div>
+    <h2 class="mt-3" style="color:var(--primary)">HealthAI</h2>
+    <p>Initializing Neural Health Models...</p>
+</div>
+
+<!-- EMERGENCY DETECTION MODAL -->
+<div id="emergencyModal" class="emergency-overlay" style="display:none;">
+    <div class="emergency-card">
+        <i class="ri-alert-fill pulse-warning"></i>
+        <h1>CRITICAL EMERGENCY DETECTED</h1>
+        <p>Your symptoms indicate a potentially life-threatening condition (e.g., severe chest pain, stroke symptoms, or acute respiratory distress).</p>
+        <h2>CALL EMERGENCY SERVICES IMMEDIATELY</h2>
+        <div class="emergency-actions">
+            <button class="danger-btn" onclick="window.open('tel:112')"><i class="ri-phone-fill"></i> Call 112 (Emergency)</button>
+            <button class="danger-btn" style="background:#b91c1c;" onclick="window.open('tel:108')"><i class="ri-alarm-warning-fill"></i> Call 108 (Ambulance)</button>
+            <button class="glass-btn" onclick="closeEmergency()"><i class="ri-close-line"></i> I Understand</button>
+        </div>
+    </div>
+</div>
+
+<!-- FIRST AID & EMERGENCY SOS MODAL -->
+<div id="firstAidModal" class="emergency-overlay" style="display:none;">
+    <div class="first-aid-card glass-panel">
+        <div class="d-flex justify-between align-center mb-3">
+            <h2 class="text-danger"><i class="ri-heart-pulse-fill"></i> Emergency First-Aid Protocols & SOS</h2>
+            <button class="icon-btn-small" onclick="closeFirstAidModal()"><i class="ri-close-line"></i></button>
+        </div>
+        <p class="text-sm text-muted mb-3">Instant clinical guidance for critical medical emergencies prior to professional arrival.</p>
+
+        <div class="sos-dial-bar mb-3">
+            <button class="sos-call-btn" onclick="window.open('tel:112')"><i class="ri-phone-fill"></i> Call 112 (Universal)</button>
+            <button class="sos-call-btn" onclick="window.open('tel:108')"><i class="ri-hospital-line"></i> Call 108 (Ambulance)</button>
+            <button class="sos-call-btn" onclick="window.open('tel:1066')"><i class="ri-shield-cross-line"></i> Call Poison Control</button>
+        </div>
+
+        <div class="first-aid-tabs mb-3">
+            <button class="fa-tab active" onclick="switchFirstAidTab('cpr', event)"><i class="ri-heart-line"></i> CPR</button>
+            <button class="fa-tab" onclick="switchFirstAidTab('choking', event)"><i class="ri-wind-line"></i> Choking</button>
+            <button class="fa-tab" onclick="switchFirstAidTab('stroke', event)"><i class="ri-brain-line"></i> Stroke (FAST)</button>
+            <button class="fa-tab" onclick="switchFirstAidTab('burns', event)"><i class="ri-fire-line"></i> Burns</button>
+            <button class="fa-tab" onclick="switchFirstAidTab('bleeding', event)"><i class="ri-drop-line"></i> Bleeding</button>
+            <button class="fa-tab" onclick="switchFirstAidTab('seizure', event)"><i class="ri-flashlight-line"></i> Seizure</button>
+        </div>
+
+        <div class="first-aid-content glass-card" id="faContent">
+            <!-- Dynamically populated -->
+        </div>
+    </div>
+</div>
+
+<!-- DOCTOR APPOINTMENT BOOKING MODAL -->
+<div id="bookingModal" class="emergency-overlay" style="display:none;">
+    <div class="booking-card glass-panel">
+        <div class="d-flex justify-between align-center mb-3">
+            <h3><i class="ri-calendar-check-line text-primary"></i> Schedule Specialist Consultation</h3>
+            <button class="icon-btn-small" onclick="closeBookingModal()"><i class="ri-close-line"></i></button>
+        </div>
+        <p class="text-sm text-muted mb-3">Book an appointment with an affiliated specialist and sync it to your Health Calendar.</p>
+
+        <div class="booking-form">
+            <label class="form-label">Specialist Field</label>
+            <input type="text" id="bookSpecialty" class="glass-input mb-3" placeholder="e.g., Cardiologist, Neurologist">
+
+            <label class="form-label">Doctor / Clinic Name</label>
+            <input type="text" id="bookDoctor" class="glass-input mb-3" placeholder="e.g., Dr. Priya Sharma (Apex Multispeciality)">
+
+            <label class="form-label">Hospital / Center Location</label>
+            <input type="text" id="bookHospital" class="glass-input mb-3" placeholder="e.g., City Medical Hub / Online Telehealth">
+
+            <div class="grid-2 gap-15 mb-3">
+                <div>
+                    <label class="form-label">Appointment Date</label>
+                    <input type="date" id="bookDate" class="glass-input">
+                </div>
+                <div>
+                    <label class="form-label">Time Slot</label>
+                    <input type="time" id="bookTime" class="glass-input" value="10:00">
+                </div>
+            </div>
+
+            <label class="form-label">Reason / Symptoms Notes</label>
+            <textarea id="bookNotes" class="glass-input mb-3" style="min-height:70px;" placeholder="Brief reason for consultation..."></textarea>
+
+            <div class="d-flex gap-15">
+                <button class="analyze-btn ripple flex-fill" onclick="submitAppointment()"><i class="ri-check-line"></i> Confirm & Sync to Calendar</button>
+                <button class="glass-btn" onclick="closeBookingModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PDF CLINICAL REPORT TEMPLATE (PRINT READY) -->
+<div id="printReportArea" class="print-only">
+    <div class="print-header">
+        <h2><i class="ri-pulse-line"></i> HealthGuard AI Clinical Summary</h2>
+        <p>Comprehensive Diagnostic & Lifestyle Analysis Report</p>
+    </div>
+    <div class="print-body">
+        <div class="print-meta-grid">
+            <p><strong>Patient:</strong> <span id="printName">User</span></p>
+            <p><strong>Date & Time:</strong> <span id="printDate"></span></p>
+            <p><strong>Report ID:</strong> <span id="printReportId"></span></p>
+            <p><strong>AI Model:</strong> Gemini 2.5 Diagnostic Engine</p>
+        </div>
+        <hr class="print-hr">
+        <h3>1. Patient Chief Complaint & Reported Symptoms</h3>
+        <p id="printSymptoms" class="print-box"></p>
+
+        <h3>2. Primary Diagnostic Findings</h3>
+        <div class="print-diagnosis-row">
+            <div>
+                <p><strong>Primary Prediction:</strong> <span id="printDisease" style="font-weight:700; color:#0f766e;"></span></p>
+                <p><strong>AI Confidence Score:</strong> <span id="printConfidence"></span></p>
+            </div>
+            <div>
+                <p><strong>Calculated Severity / Risk:</strong> <span id="printRisk"></span></p>
+                <p><strong>Overall Health Score:</strong> <span id="printHealthScore"></span>/100</p>
+            </div>
+        </div>
+
+        <h3>3. Clinical Evaluation & Differential Rationale</h3>
+        <p id="printAnalysis"></p>
+        <p><strong>Underlying Causes:</strong> <span id="printCauses"></span></p>
+        <p><strong>Recommended Clinical Investigations:</strong> <span id="printTests"></span></p>
+
+        <h3>4. Personalized Dietary & Recovery Regimen</h3>
+        <div class="print-diet-grid">
+            <div>
+                <strong>Recommended Foods:</strong>
+                <ul id="printDietEat"></ul>
+            </div>
+            <div>
+                <strong>Foods to Restrict / Avoid:</strong>
+                <ul id="printDietAvoid"></ul>
+            </div>
+        </div>
+        <p><strong>Hydration & Lifestyle:</strong> <span id="printLifestyle"></span></p>
+        <p><strong>Expected Recovery Horizon:</strong> <span id="printRecovery"></span> | <strong>Consultation:</strong> <span id="printSpecialist"></span></p>
+
+        <div class="print-disclaimer mt-3">
+            <strong>Medical Disclaimer:</strong> This document is an AI-assisted diagnostic evaluation generated for informational support. It does not replace clinical judgment or certified medical diagnoses. Please share this summary with a licensed medical practitioner.
+        </div>
+    </div>
+</div>
+
+<!-- PREMIUM LOGIN -->
+<div id="loginPage" class="login-container">
+    <div class="login-glass">
+        <div class="login-header">
+            <i class="ri-pulse-line logo-icon"></i>
+            <h2>HealthAI</h2>
+            <p>Intelligent Healthcare & Predictive Analytics</p>
+        </div>
+        <input type="email" placeholder="Use Google Login Only" class="glass-input login-input" disabled>
+        <button class="login-btn ripple" onclick="loginUser()">Sign In to Account</button>
+        <div class="divider"><span>OR</span></div>
+        <button class="google-btn ripple" onclick="googleLogin()">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google Logo">
+            Continue with Google
+        </button>
+    </div>
+</div>
+
+<!-- APP -->
+<div id="appWrapper" style="display:none; width:100%;">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar glass-panel">
+        <div class="sidebar-header"><i class="ri-pulse-line logo-icon"></i><h2 class="logo">HealthAI</h2></div>
+        <div class="logo-line"></div>
+        <div class="nav-menu">
+            <button class="nav-btn active" onclick="showSection('main')"><i class="ri-home-smile-line"></i> Home</button>
+            <button class="nav-btn" onclick="showSection('dashboard')"><i class="ri-dashboard-line"></i> Dashboard</button>
+            <button class="nav-btn" onclick="showSection('vitals')"><i class="ri-heart-pulse-line"></i> Vitals Tracker</button>
+            <button class="nav-btn" onclick="showSection('meds')"><i class="ri-capsule-line"></i> Medicine Vault</button>
+            <button class="nav-btn" onclick="showSection('appointments')"><i class="ri-calendar-check-line"></i> Appointments</button>
+            <button class="nav-btn" onclick="showSection('history')"><i class="ri-folder-history-line"></i> History</button>
+            <button class="nav-btn" onclick="showSection('calendar')"><i class="ri-calendar-event-line"></i> Calendar</button>
+            <button class="nav-btn" onclick="showSection('settings')"><i class="ri-settings-4-line"></i> Settings</button>
+            <div class="nav-divider"></div>
+            <button class="nav-btn" onclick="showSection('feedback')"><i class="ri-message-3-line"></i> Feedback</button>
+            <button class="nav-btn" onclick="showSection('about')"><i class="ri-information-line"></i> About</button>
+        </div>
+        <div class="profile-bottom glass-card" onclick="toggleProfileMenu()" style="display:none;">
+            <img id="userPhoto" alt="Profile">
+            <div class="profile-info"><span id="userName"></span><small>Pro Account</small></div>
+            <i class="ri-arrow-up-s-line"></i>
+        </div>
+        <div id="profileMenu" class="profile-menu glass-panel">
+            <button onclick="logout()"><i class="ri-logout-circle-r-line"></i> Logout</button>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+        <!-- GLOBAL HEADER -->
+        <div class="global-header glass-panel">
+            <div class="health-tip-header">
+                <i class="ri-lightbulb-flash-line text-warning"></i> <strong>Daily Tip:</strong> <span id="dailyTipText">Drinking 8 glasses of water daily improves cognitive function and skin health.</span>
+            </div>
+            <div class="header-actions">
+                <button class="sos-pill-btn ripple" onclick="openFirstAidModal()" title="Emergency First-Aid Guide">
+                    <i class="ri-alarm-warning-fill"></i> SOS First Aid
+                </button>
+                <button class="icon-btn theme-toggle" onclick="toggleTheme()" title="Toggle Theme">
+                    <i class="ri-moon-line" id="themeIcon"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="page-wrapper">
+            <!-- MAIN (HOME: SYMPTOM CHECKER & OCR) -->
+            <div class="container glass-panel animate-fade-up" id="mainApp">
+
+                <div class="header-badge-wrap text-center mt-3">
+                    <span class="header-badge"><span class="badge-pulse"></span> Next-Gen Clinical AI Diagnostic Core</span>
+                </div>
+                <h1 class="text-center main-title">Intelligent Health <span class="title-highlight">Predictor</span></h1>
+                <p class="subtitle text-center">AI-powered clinical triage, real-time biomarker analysis, and smart OCR document diagnostics.</p>
+
+                <div class="feature-chips mb-4">
+                    <span><i class="ri-stethoscope-line"></i> Symptoms Check</span>
+                    <span><i class="ri-file-search-line"></i> Report OCR Scan</span>
+                    <span><i class="ri-mic-line"></i> Voice Dictation</span>
+                    <span><i class="ri-volume-up-line"></i> Audio Reader</span>
+                    <span><i class="ri-capsule-line"></i> Drug Safe</span>
+                </div>
+
+                <!-- CLINICAL AI INPUT TERMINAL (UPGRADED) -->
+                <div class="input-glass mb-4">
+                    <div class="terminal-header d-flex justify-between align-center mb-3">
+                        <div class="d-flex align-center gap-10">
+                            <span class="status-indicator-dot"></span>
+                            <span class="terminal-title">Clinical Diagnostic Terminal</span>
+                        </div>
+                        <span class="terminal-hint text-muted"><i class="ri-shield-check-line text-success"></i> HIPAA Aligned & Encrypted</span>
+                    </div>
+
+                    <!-- Quick 1-tap symptom examples -->
+                    <div class="quick-tags-wrap mb-3">
+                        <span class="quick-tags-label"><i class="ri-flashlight-line text-warning"></i> Quick Symptoms:</span>
+                        <div class="quick-tags-scroll">
+                            <button type="button" class="quick-tag-chip" onclick="fillQuickSymptom('Severe throbbing migraine with light sensitivity and nausea for 2 days')"><i class="ri-add-line"></i> Migraine & Aura</button>
+                            <button type="button" class="quick-tag-chip" onclick="fillQuickSymptom('High fever 102F, persistent dry cough, sore throat, and severe body chills for 3 days')"><i class="ri-add-line"></i> High Fever & Chills</button>
+                            <button type="button" class="quick-tag-chip" onclick="fillQuickSymptom('Upper abdominal burning pain after eating, acid reflux, and stomach bloating')"><i class="ri-add-line"></i> Acidity & Gastric</button>
+                            <button type="button" class="quick-tag-chip" onclick="fillQuickSymptom('Persistent joint stiffness in knees and wrists with morning fatigue')"><i class="ri-add-line"></i> Joint Stiffness</button>
+                            <button type="button" class="quick-tag-chip" onclick="fillQuickSymptom('Skin rash with itchy red hives and swelling on forearms after contact')"><i class="ri-add-line"></i> Allergic Rash</button>
+                        </div>
+                    </div>
+
+                    <div class="input-row">
+                        <textarea id="query" placeholder="Describe your symptoms in detail (duration, severity, age, trigger factors)... or click the mic button for voice dictation."></textarea>
+                        <button class="voice-btn" id="voiceBtn" onclick="startVoice()" title="Speak symptoms (Voice Dictation)">
+                            <i class="ri-mic-line" id="voiceIcon"></i>
+                            <span class="voice-btn-label">Voice</span>
+                        </button>
+                    </div>
+                    <div id="voiceIndicator" class="voice-indicator" style="display:none;">
+                        <span class="pulse-dot"></span> <span id="voiceStatusText">Listening to your voice... Speak clearly</span>
+                    </div>
+                    <div class="d-flex justify-between align-center mt-3 flex-wrap gap-15">
+                        <button class="analyze-btn ripple" onclick="askAI()"><i class="ri-sparkling-fill"></i> Analyze Symptoms with AI</button>
+                        <button class="glass-btn text-sm" onclick="clearSymptomsInput()"><i class="ri-eraser-line"></i> Clear Symptoms</button>
+                    </div>
+                </div>
+
+                <!-- UPLOAD MEDICAL REPORT -->
+                <div class="upload-glass mb-4">
+                    <div class="upload-box" id="uploadBox" onclick="document.getElementById('reportFile').click()">
+                        <input type="file" id="reportFile" accept=".pdf,.png,.jpg,.jpeg,.txt" hidden>
+                        <div class="upload-icon-circle">
+                            <i class="ri-file-add-line upload-icon"></i>
+                        </div>
+                        <p class="upload-title"><b>Click or Drag & Drop clinical report / lab test</b></p>
+                        <span class="upload-subtitle text-muted">PDF, PNG, JPG, TXT • Optical Character Recognition (OCR)</span>
+                    </div>
+                    <div id="fileName" class="file-name mb-3"></div>
+                    <button class="analyze-btn secondary ripple" onclick="uploadReport()"><i class="ri-search-eye-line"></i> Analyze Document with OCR</button>
+                </div>
+
+                <div id="response" class="response-container mt-4"></div>
+
+                <!-- ADVANCED AI INSIGHTS & SMART ANALYSIS -->
+                <div id="advancedInsights" class="mt-4" style="display:none;">
+
+                    <div class="bento-grid mb-4">
+                        <div class="bento-box glass-panel text-center">
+                            <h3 class="mb-3">Overall Health Score</h3>
+                            <div class="circular-progress" id="riskScoreCircle"><span id="riskScoreText">0</span></div>
+                            <h4 id="riskLevel" class="mt-3 font-weight-bold">Evaluating...</h4>
+                            <p class="text-sm mt-2" id="aiSeverity">Severity: N/A</p>
+                        </div>
+                        <div class="bento-box glass-panel span-2">
+                            <div class="d-flex justify-between align-center mb-3">
+                                <h3><i class="ri-stethoscope-line text-primary"></i> Top Diagnostic Predictions</h3>
+                                <button class="glass-btn text-sm" id="ttsBtn" onclick="toggleSpeakDiagnosis()">
+                                    <i class="ri-volume-up-line" id="ttsIcon"></i> <span id="ttsBtnText">Listen to Analysis</span>
+                                </button>
+                            </div>
+                            <div class="prob-list flex-fill" id="topDiseasesList"></div>
+                            <p class="text-sm text-muted mt-2 text-right">AI Confidence: <strong id="aiConfidence">0%</strong></p>
+                        </div>
+                    </div>
+
+                    <!-- Medical Details Panel -->
+                    <div class="bento-box glass-panel mb-4">
+                        <div class="d-flex justify-between align-center mb-3">
+                            <h3><i class="ri-book-read-line text-primary"></i> Comprehensive Medical Evaluation</h3>
+                            <button class="action-btn-primary" onclick="openBookingModal()"><i class="ri-calendar-check-line"></i> Book Specialist Consultation</button>
+                        </div>
+                        <div class="grid-2 gap-15">
+                            <div>
+                                <p class="mb-2"><strong><i class="ri-information-line text-info"></i> Explanation:</strong> <span id="aiExp"></span></p>
+                                <p class="mb-2"><strong><i class="ri-question-mark text-warning"></i> Clinical Rationale:</strong> <span id="aiWhy"></span></p>
+                                <p class="mb-2"><strong><i class="ri-bug-line text-danger"></i> Underlying Causes:</strong> <span id="aiCauses"></span></p>
+                                <p class="mb-2"><strong><i class="ri-test-tube-line text-primary"></i> Recommended Lab Tests:</strong> <span id="aiTests"></span></p>
+                            </div>
+                            <div>
+                                <p class="mb-2"><strong><i class="ri-leaf-line text-success"></i> Evidence Remedies:</strong> <span id="aiRemedies"></span></p>
+                                <p class="mb-2"><strong><i class="ri-shield-cross-line text-warning"></i> Preventative Protocol:</strong> <span id="aiPrevention"></span></p>
+                                <p class="mb-2"><strong><i class="ri-timer-line text-info"></i> Estimated Recovery:</strong> <span id="aiRecovery"></span></p>
+                                <p class="mb-2"><strong><i class="ri-user-heart-line text-primary"></i> Recommended Specialist:</strong> <span id="aiSpecialist"></span></p>
+                            </div>
+                        </div>
+                        <div class="glass-card mt-3" style="border-left:4px solid var(--danger); background: rgba(239, 68, 68, 0.1);">
+                            <strong><i class="ri-alarm-warning-line"></i> Critical Emergency Red Flags:</strong> <span id="aiEmergency"></span><br>
+                            <strong><i class="ri-hospital-line"></i> Physician Visit Criteria:</strong> <span id="aiDoctor"></span>
+                        </div>
+                    </div>
+
+                    <!-- AI DIET RECOMMENDATION -->
+                    <div class="bento-grid mb-4">
+                        <div class="bento-box glass-panel span-2">
+                            <h3 class="mb-3"><i class="ri-restaurant-line text-success"></i> Personalized Diet & Recovery Nutrition</h3>
+                            <div class="grid-2 gap-15">
+                                <div>
+                                    <h4 class="text-success mb-2">Foods to Consume <i class="ri-check-line"></i></h4>
+                                    <ul id="dietEat" style="padding-left:20px; font-size:14px; margin-bottom:15px;"></ul>
+                                    <p class="text-sm"><strong>Breakfast:</strong> <span id="dietBfast"></span></p>
+                                    <p class="text-sm"><strong>Lunch:</strong> <span id="dietLunch"></span></p>
+                                    <p class="text-sm"><strong>Dinner:</strong> <span id="dietDinner"></span></p>
+                                </div>
+                                <div>
+                                    <h4 class="text-danger mb-2">Foods to Avoid / Limit <i class="ri-close-line"></i></h4>
+                                    <ul id="dietAvoid" style="padding-left:20px; font-size:14px; margin-bottom:15px;"></ul>
+                                    <p class="text-sm"><strong>Snacks:</strong> <span id="dietSnack"></span></p>
+                                    <p class="text-sm"><strong>Fruits:</strong> <span id="dietFruits"></span></p>
+                                    <p class="text-sm text-info mt-2"><strong><i class="ri-drop-line"></i> Daily Water:</strong> <span id="dietWater"></span></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bento-box glass-panel text-center justify-center">
+                            <h3 class="mb-3"><i class="ri-run-line text-primary"></i> Lifestyle Protocol</h3>
+                            <div class="mb-3">
+                                <i class="ri-moon-clear-line text-warning" style="font-size:24px;"></i>
+                                <p class="text-sm mt-1" id="dietSleep"></p>
+                            </div>
+                            <div>
+                                <i class="ri-heart-pulse-line text-danger" style="font-size:24px;"></i>
+                                <p class="text-sm mt-1" id="dietExercise"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- NEARBY HOSPITAL RECOMMENDATIONS -->
+                    <div class="bento-box glass-panel mb-4">
+                        <div class="d-flex justify-between align-center mb-3">
+                            <h3><i class="ri-map-pin-2-line text-danger"></i> Nearby Healthcare Centers</h3>
+                            <button class="glass-btn text-sm" onclick="fetchHospitals()"><i class="ri-refresh-line"></i> Refresh Nearby</button>
+                        </div>
+                        <div id="hospitalList" class="grid-2 gap-15">
+                            <p>Loading hospitals near you...</p>
+                        </div>
+                    </div>
+
+                    <div id="voiceControls" class="voice-controls glass-card mt-4 d-flex justify-between align-center flex-wrap gap-15">
+                        <div>
+                            <strong>Export or Print Clinical Record:</strong>
+                            <p class="text-sm text-muted">Generate a formatted summary suitable for your physician.</p>
+                        </div>
+                        <div class="d-flex gap-15">
+                            <button class="glass-btn" onclick="printReport()"><i class="ri-printer-line"></i> Print Full Medical Report</button>
+                            <button class="action-btn-primary" onclick="openBookingModal()"><i class="ri-calendar-check-line"></i> Book Doctor</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FEATURE 3: VITALS TRACKER SECTION -->
+            <div class="container glass-panel animate-fade-up" id="vitalsSection" style="display:none;">
+                <div class="d-flex justify-between align-center mb-4 flex-wrap gap-15">
+                    <div>
+                        <h2><i class="ri-heart-pulse-line text-danger"></i> Health Vitals & Biomarkers</h2>
+                        <p class="text-muted text-sm">Monitor Blood Pressure, Glucose, SpO2, Heart Rate, and BMI with instant clinical stages.</p>
+                    </div>
+                </div>
+
+                <!-- VITALS LOGGING CARDS -->
+                <div class="vitals-input-grid mb-4">
+                    <!-- Blood Pressure Card -->
+                    <div class="vital-card glass-card">
+                        <div class="d-flex justify-between align-center mb-2">
+                            <span class="vital-title"><i class="ri-heart-2-line text-danger"></i> Blood Pressure</span>
+                            <span class="vital-badge" id="bpBadge">Normal</span>
+                        </div>
+                        <div class="grid-2 gap-15">
+                            <div>
+                                <label class="text-sm">Systolic (mmHg)</label>
+                                <input type="number" id="vitalsSystolic" placeholder="120" class="glass-input" oninput="evaluateVitalsBadges()">
+                            </div>
+                            <div>
+                                <label class="text-sm">Diastolic (mmHg)</label>
+                                <input type="number" id="vitalsDiastolic" placeholder="80" class="glass-input" oninput="evaluateVitalsBadges()">
+                            </div>
+                        </div>
+                        <small class="text-muted text-xs mt-2 d-block">AHA Standard: &lt;120/80 mmHg</small>
+                    </div>
+
+                    <!-- Blood Glucose Card -->
+                    <div class="vital-card glass-card">
+                        <div class="d-flex justify-between align-center mb-2">
+                            <span class="vital-title"><i class="ri-drop-line text-warning"></i> Blood Sugar</span>
+                            <span class="vital-badge" id="glucoseBadge">Normal</span>
+                        </div>
+                        <div>
+                            <label class="text-sm">Glucose Level (mg/dL)</label>
+                            <input type="number" id="vitalsGlucose" placeholder="95" class="glass-input" oninput="evaluateVitalsBadges()">
+                        </div>
+                        <small class="text-muted text-xs mt-2 d-block">Fasting: 70-99 mg/dL | Normal</small>
+                    </div>
+
+                    <!-- Heart Rate & Oxygen -->
+                    <div class="vital-card glass-card">
+                        <div class="d-flex justify-between align-center mb-2">
+                            <span class="vital-title"><i class="ri-pulse-line text-primary"></i> Pulse & SpO2</span>
+                            <span class="vital-badge" id="pulseBadge">Optimal</span>
+                        </div>
+                        <div class="grid-2 gap-15">
+                            <div>
+                                <label class="text-sm">Heart Rate (BPM)</label>
+                                <input type="number" id="vitalsHR" placeholder="72" class="glass-input" oninput="evaluateVitalsBadges()">
+                            </div>
+                            <div>
+                                <label class="text-sm">Oxygen SpO2 (%)</label>
+                                <input type="number" id="vitalsSpO2" placeholder="98" class="glass-input" oninput="evaluateVitalsBadges()">
+                            </div>
+                        </div>
+                        <small class="text-muted text-xs mt-2 d-block">Resting: 60-100 BPM | SpO2: 95-100%</small>
+                    </div>
+
+                    <!-- Weight & Height (BMI Calculator) -->
+                    <div class="vital-card glass-card">
+                        <div class="d-flex justify-between align-center mb-2">
+                            <span class="vital-title"><i class="ri-scales-3-line text-success"></i> BMI Calculator</span>
+                            <span class="vital-badge" id="bmiBadge">BMI: 22.0</span>
+                        </div>
+                        <div class="grid-2 gap-15">
+                            <div>
+                                <label class="text-sm">Weight (kg)</label>
+                                <input type="number" id="vitalsWeight" placeholder="70" class="glass-input" oninput="calculateLiveBMI()">
+                            </div>
+                            <div>
+                                <label class="text-sm">Height (cm)</label>
+                                <input type="number" id="vitalsHeight" placeholder="175" class="glass-input" oninput="calculateLiveBMI()">
+                            </div>
+                        </div>
+                        <small class="text-muted text-xs mt-2 d-block">Calculated BMI: <strong id="calculatedBmiVal">22.9</strong> (Normal Weight)</small>
+                    </div>
+                </div>
+
+                <div class="input-glass mb-4">
+                    <label class="form-label">Clinical Observations / Notes (Optional)</label>
+                    <input type="text" id="vitalsNotes" class="glass-input mb-3" placeholder="e.g., Checked post morning run, feeling energetic...">
+                    <button class="analyze-btn ripple" onclick="saveVitals()"><i class="ri-save-line"></i> Save Vitals Log</button>
+                    <div id="vitalsStatus" class="mt-2"></div>
+                </div>
+
+                <!-- VITALS LOGS TABLE -->
+                <div class="glass-card">
+                    <h3 class="mb-3"><i class="ri-history-line"></i> Recent Vitals History</h3>
+                    <div class="table-responsive">
+                        <table class="vitals-table" id="vitalsHistoryTable">
+                            <thead>
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Blood Pressure</th>
+                                    <th>Blood Sugar</th>
+                                    <th>Heart Rate</th>
+                                    <th>SpO2</th>
+                                    <th>BMI</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vitalsTableBody">
+                                <tr><td colspan="8" class="text-center text-muted">No vitals logged yet.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FEATURE 4: MEDICINE VAULT & DRUG INTERACTION CHECKER -->
+            <div class="container glass-panel animate-fade-up" id="medsSection" style="display:none;">
+                <div class="d-flex justify-between align-center mb-4 flex-wrap gap-15">
+                    <div>
+                        <h2><i class="ri-capsule-line text-primary"></i> Medicine Vault & Drug Interactions</h2>
+                        <p class="text-muted text-sm">Schedule daily pills and evaluate potential drug-drug & food safety conflicts using AI.</p>
+                    </div>
+                    <button class="action-btn-primary" onclick="checkAllCurrentMedInteractions()"><i class="ri-shield-check-line"></i> AI Safety Check All Meds</button>
+                </div>
+
+                <div class="grid-2 gap-15 mb-4">
+                    <!-- Column 1: Daily Pill Schedule -->
+                    <div class="glass-card">
+                        <h3 class="mb-3"><i class="ri-time-line text-warning"></i> Daily Medication Schedule</h3>
+                        <p class="text-sm text-muted mb-3">Keep track of your morning, afternoon, and evening prescriptions.</p>
+                        <div id="medicationsList" class="med-list-container">
+                            <p class="text-muted">Loading medications...</p>
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Add Medication -->
+                    <div class="glass-card">
+                        <h3 class="mb-3"><i class="ri-add-circle-line text-success"></i> Add Medication</h3>
+                        <div class="form-group">
+                            <label class="form-label">Medicine Name</label>
+                            <input type="text" id="medName" placeholder="e.g., Metformin, Atorvastatin, Aspirin" class="glass-input mb-3">
+
+                            <div class="grid-2 gap-15 mb-3">
+                                <div>
+                                    <label class="form-label">Dosage</label>
+                                    <input type="text" id="medDosage" placeholder="e.g., 500mg, 1 tablet" class="glass-input">
+                                </div>
+                                <div>
+                                    <label class="form-label">Timing</label>
+                                    <select id="medTiming" class="glass-input">
+                                        <option value="Morning">Morning (Breakfast)</option>
+                                        <option value="Afternoon">Afternoon (Lunch)</option>
+                                        <option value="Evening">Evening (Dinner)</option>
+                                        <option value="Night">Night (Bedtime)</option>
+                                        <option value="As Needed">As Needed (PRN)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <label class="form-label">Instructions / Doctor Notes</label>
+                            <input type="text" id="medNotes" placeholder="e.g., Take after meals with full glass of water" class="glass-input mb-3">
+
+                            <button class="analyze-btn ripple" onclick="addNewMedication()"><i class="ri-check-line"></i> Add to Medicine Vault</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DRUG INTERACTION CHECKER TOOL -->
+                <div class="glass-card mb-4">
+                    <h3 class="mb-2"><i class="ri-shield-cross-line text-danger"></i> AI Drug Interaction & Food Safety Checker</h3>
+                    <p class="text-sm text-muted mb-3">Input two or more medications to analyze dangerous interactions, adverse reactions, and dietary warnings.</p>
+                    <div class="input-row mb-3">
+                        <input type="text" id="drugCheckInput" placeholder="Enter medicines separated by commas (e.g., Aspirin, Ibuprofen, Warfarin)..." class="glass-input">
+                        <button class="analyze-btn secondary" style="white-space:nowrap;" onclick="checkCustomDrugInteractions()"><i class="ri-microscope-line"></i> Check Safety</button>
+                    </div>
+                    <div id="drugInteractionResult" style="display:none;" class="interaction-card">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- FEATURE 7: APPOINTMENTS SECTION -->
+            <div class="container glass-panel animate-fade-up" id="appointmentsSection" style="display:none;">
+                <div class="d-flex justify-between align-center mb-4 flex-wrap gap-15">
+                    <div>
+                        <h2><i class="ri-calendar-check-line text-primary"></i> Scheduled Consultations</h2>
+                        <p class="text-muted text-sm">Upcoming specialist visits, diagnostic follow-ups, and calendar sync.</p>
+                    </div>
+                    <button class="action-btn-primary" onclick="openBookingModal()"><i class="ri-add-line"></i> Book New Consultation</button>
+                </div>
+
+                <div id="appointmentsList" class="appointments-grid mb-4">
+                    <p class="text-muted">Loading scheduled appointments...</p>
+                </div>
+            </div>
+
+            <!-- HISTORY -->
+            <div class="container glass-panel animate-fade-up" id="historySection" style="display:none;">
+                <div class="d-flex justify-between align-center mb-4 flex-wrap gap-15">
+                    <h2><i class="ri-folder-history-line"></i> Diagnostic History</h2>
+                    <div class="d-flex gap-15">
+                        <button class="glass-btn" onclick="exportHistoryCSV()"><i class="ri-file-excel-line text-success"></i> CSV</button>
+                        <button class="glass-btn" onclick="window.print()"><i class="ri-file-pdf-line text-danger"></i> PDF</button>
+                    </div>
+                </div>
+                <div class="search-bar history-search mb-4">
+                    <i class="ri-search-line"></i>
+                    <input type="text" id="historySearch" placeholder="Search past conversations and reports..." onkeyup="filterHistory()">
+                </div>
+
+                <div id="historyList" class="history-grid-modern"></div>
+            </div>
+
+            <!-- DASHBOARD (ADVANCED ANALYTICS) -->
+            <div class="dashboard-wrapper animate-fade-up" id="dashboardSection" style="display:none;">
+                <div class="dash-header glass-panel mb-4">
+                    <div class="dh-left">
+                        <h2>Welcome back, <span id="dashWelcomeName">User</span> 👋</h2>
+                        <p class="text-muted mt-2">Your Intelligent HealthAI Analytics Dashboard is ready.</p>
+                    </div>
+                    <div class="dh-right">
+                        <div class="dh-stat"><i class="ri-calendar-line text-primary"></i> <span id="currentDate"></span></div>
+                        <div class="dh-stat"><i class="ri-time-line text-primary"></i> <span id="currentTime"></span></div>
+                    </div>
+                </div>
+
+                <!-- 8 STAT CARDS INCLUDING VITALS & MEDS -->
+                <div class="stats grid-4 mb-4">
+                    <div class="stat-card glass-panel"><div class="sc-icon"><i class="ri-message-2-line"></i></div><div class="sc-info"><p>Total Analyses</p><h3 id="totalQueries" class="counter mt-1">0</h3></div></div>
+                    <div class="stat-card glass-panel"><div class="sc-icon"><i class="ri-file-text-line"></i></div><div class="sc-info"><p>Reports Uploaded</p><h3 id="totalReports" class="counter mt-1">0</h3></div></div>
+                    <div class="stat-card glass-panel"><div class="sc-icon"><i class="ri-heart-pulse-line text-warning"></i></div><div class="sc-info"><p>Avg Risk Score</p><h3 id="avgRisk" class="counter mt-1">0</h3></div></div>
+                    <div class="stat-card glass-panel"><div class="sc-icon"><i class="ri-virus-line text-danger"></i></div><div class="sc-info"><p>Distinct Diagnoses</p><h3 id="totDiseases" class="mt-1">0</h3></div></div>
+                </div>
+
+                <div class="stats grid-4 mb-4">
+                    <div class="stat-card glass-panel"><div class="sc-icon" style="background:var(--danger)"><i class="ri-arrow-up-circle-line"></i></div><div class="sc-info"><p>High Risk Cases</p><h3 id="highCount" class="mt-1">0</h3></div></div>
+                    <div class="stat-card glass-panel"><div class="sc-icon" style="background:var(--warning)"><i class="ri-arrow-right-circle-line"></i></div><div class="sc-info"><p>Moderate Risk</p><h3 id="medCount" class="mt-1">0</h3></div></div>
+                    <div class="stat-card glass-panel"><div class="sc-icon" style="background:var(--success)"><i class="ri-arrow-down-circle-line"></i></div><div class="sc-info"><p>Low Risk Cases</p><h3 id="lowCount" class="mt-1">0</h3></div></div>
+                    <div class="stat-card glass-panel"><div class="sc-icon" style="background:#0284c7"><i class="ri-capsule-line"></i></div><div class="sc-info"><p>Active Prescriptions</p><h3 id="dashTotalMeds" class="mt-1">0</h3></div></div>
+                </div>
+
+                <!-- CHARTS ROW -->
+                <div class="bento-grid mb-4">
+                    <div class="bento-box glass-panel span-2"><h3 class="mb-3">Diagnostic Risk Score Trend</h3><div class="chart-container"><canvas id="healthChart"></canvas></div></div>
+                    <div class="bento-box glass-panel"><h3 class="mb-3">Risk Distribution</h3><div class="chart-container"><canvas id="distributionChart"></canvas></div></div>
+                </div>
+
+                <div class="bento-grid mb-4">
+                    <div class="bento-box glass-panel"><h3 class="mb-3">Top Diagnosed Conditions</h3><div class="chart-container"><canvas id="topDiseasesChart"></canvas></div></div>
+                    <div class="bento-box glass-panel span-2"><h3 class="mb-3">Biomarker Trend (Blood Pressure & Glucose)</h3><div class="chart-container"><canvas id="vitalsTrendChart"></canvas></div></div>
+                </div>
+            </div>
+
+            <!-- HEALTH CALENDAR WITH APPOINTMENTS -->
+            <div class="container glass-panel animate-fade-up" id="calendarSection" style="display:none;">
+                <div class="d-flex justify-between align-center mb-4 flex-wrap gap-15">
+                    <h2><i class="ri-calendar-event-line"></i> Health & Appointment Calendar</h2>
+                    <button class="action-btn-primary" onclick="openBookingModal()"><i class="ri-add-line"></i> Schedule Event</button>
+                </div>
+                <div class="calendar-ui glass-card flex-fill">
+                    <div class="cal-header mb-4">
+                        <button class="icon-btn" onclick="changeMonth(-1)"><i class="ri-arrow-left-s-line"></i></button>
+                        <h4 class="font-weight-bold" id="calMonthYearTitle">Month Year</h4>
+                        <button class="icon-btn" onclick="changeMonth(1)"><i class="ri-arrow-right-s-line"></i></button>
+                    </div>
+                    <div class="cal-grid" id="calendarGridDays"></div>
+                </div>
+                <div class="mt-4 glass-card">
+                    <h4 class="mb-2"><i class="ri-information-line text-primary"></i> Calendar Legend</h4>
+                    <div class="d-flex gap-15 flex-wrap text-sm">
+                        <span><span class="legend-dot" style="background:var(--primary-light);"></span> Today</span>
+                        <span><span class="legend-dot" style="background:var(--warning);"></span> Health Log</span>
+                        <span><span class="legend-dot" style="background:var(--danger);"></span> Doctor Appointment</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SETTINGS -->
+            <div class="container glass-panel animate-fade-up" id="settingsSection" style="display:none;">
+                <h2 class="mb-4"><i class="ri-settings-4-line"></i> Preferences & Profile</h2>
+                <div class="settings-layout">
+                    <div class="settings-sidebar">
+                        <div class="settings-tab active" onclick="openSettingsTab('general', event)"><i class="ri-user-settings-line"></i> Profile</div>
+                        <div class="settings-tab" onclick="openSettingsTab('appearance', event)"><i class="ri-palette-line"></i> Appearance</div>
+                        <div class="settings-tab" onclick="openSettingsTab('data', event)"><i class="ri-database-2-line"></i> Data Management</div>
+                    </div>
+                    <div class="settings-content">
+                        <div class="settings-panel glass-card" id="general"><h4 class="mb-4">Profile Information</h4><p id="settingsName" class="acc-text"></p><p id="settingsEmail" class="acc-text"></p></div>
+                        <div class="settings-panel glass-card" id="appearance" style="display:none;"><h4 class="mb-4">Theme Preferences</h4><p class="text-muted">Toggle Dark/Light mode using the moon/sun icon in the top right header.</p></div>
+                        <div class="settings-panel glass-card" id="data" style="display:none;"><h4 class="mb-4">Storage & Privacy</h4><button class="danger-btn ripple mb-3" onclick="clearHistoryBackend()"><i class="ri-delete-bin-line"></i> Clear All History</button></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FEEDBACK & ABOUT -->
+            <div class="container glass-panel animate-fade-up" id="feedbackSection" style="display:none;">
+                <h2 class="mb-4"><i class="ri-feedback-line"></i> Send Feedback</h2>
+                <div class="form-group">
+                    <input type="text" id="fbName" placeholder="Your Name" class="glass-input mb-3">
+                    <textarea id="fbMessage" placeholder="Describe your experience..." class="glass-input mb-3" style="min-height: 120px;"></textarea>
+                    <button class="analyze-btn ripple" onclick="submitFeedback()"><i class="ri-send-plane-fill"></i> Submit</button>
+                    <div id="fbStatus" class="mt-3"></div>
+                </div>
+            </div>
+
+            <div class="container glass-panel animate-fade-up" id="aboutSection" style="display:none; max-width: 800px;">
+                <h2 class="mb-4"><i class="ri-information-line"></i> About HealthAI</h2>
+                <div class="about-content text-muted line-height-lg">
+                    <h4 class="text-primary mb-2">Project Overview</h4>
+                    <p class="mb-4">HealthAI is an advanced healthcare analytics and diagnostic platform. It seamlessly integrates Natural Language Processing (NLP) with Gemini AI, Computer Vision (OCR) via Tesseract & PDF Plumber, real-time vitals monitoring, drug interaction safety, and doctor scheduling into an all-in-one clinical cockpit.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/script.js"></script>
+</body>
+</html>
