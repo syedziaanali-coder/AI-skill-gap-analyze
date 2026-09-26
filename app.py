@@ -243,7 +243,7 @@ def ask():
     user_query = data.get("query", "")
 
     try:
-        response = client.models.generate_content(
+        response = get_gemini_client().models.generate_content(
             model=MODEL_NAME,
             contents=ANALYSIS_PROMPT_TEMPLATE.replace("{input_text}", f"Patient Symptoms: {user_query}")
         )
@@ -297,7 +297,7 @@ def upload_report():
         return jsonify({"error": "OCR Error."}), 500
 
     try:
-        response = client.models.generate_content(
+        response = get_gemini_client().models.generate_content(
             model=MODEL_NAME,
             contents=ANALYSIS_PROMPT_TEMPLATE.replace("{input_text}", f"Medical Report OCR Data: {extracted_text}")
         )
@@ -550,7 +550,7 @@ def check_drug_interactions():
         return jsonify({"error": "No medications provided"}), 400
 
     try:
-        response = client.models.generate_content(
+        response = get_gemini_client().models.generate_content(
             model=MODEL_NAME,
             contents=INTERACTION_PROMPT_TEMPLATE.replace("{medications}", med_list)
         )
